@@ -3,9 +3,7 @@ package graphql_transport_ws
 import (
 	"context"
 	"net/http"
-	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -13,7 +11,10 @@ import (
 
 // Conn is a client connection that should be closed by the client.
 type Conn struct {
-	wc   *websocket.Conn
+	wc *websocket.Conn
+
+	in, out chan operationMessage
+
 	done chan struct{}
 
 	msgId uint64
@@ -23,64 +24,68 @@ type Conn struct {
 	msgSubs map[opId]chan<- *Response
 }
 
-// Close closes the underlying WebSocket connection.
-func (c *Conn) Close() error {
-	close(c.done)
-	// TODO: Send terminate message
-	return nil
+func newConn(wc *websocket.Conn) *Conn {
+	c := &Conn{
+		wc:   wc,
+		in:   make(chan operationMessage),
+		out:  make(chan operationMessage),
+		done: make(chan struct{}, 1),
+	}
+
+	go c.readMessages()
+	go c.writeMessages()
+
+	return c
 }
 
-func (c *Conn) init() {
-	go c.readMessages(c.done)
-	// TODO: Spin up single reader goroutine
-	// TODO: Send init message
-	// TODO: Block any queries until ack message is recieved
-	go writeMessages(c.wc, c.msgs)
-}
+func (c *Conn) readMessages() {
+	defer close(c.in)
 
-func (c *Conn) write(ctx context.Context, msg *Request) <-chan *Response {
-	respChan := make(chan *Response, 1)
-
-	id := atomic.AddUint64(&c.msgId, 1)
-	oid := opId(strconv.FormatUint(id, 10))
-
-	go func() {
-		c.msgs <- operationMessage{
-			Id:      oid,
-			Type:    gql_DATA,
-			Payload: msg,
-		}
-	}()
-
-	c.msgMu.Lock()
-	c.msgSubs[oid] = respChan
-	c.msgMu.Unlock()
-
-	return respChan
-}
-
-func (c *Conn) readMessages(done <-chan struct{}) {
 	for {
-		opMsg := new(operationMessage)
-		err := c.wc.ReadJSON(opMsg)
-		if err != nil {
-			// TODO: Handle error
+		var msg operationMessage
+		err := c.wc.ReadJSON(&msg)
+		if err != nil && websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
 			return
 		}
 
-		c.msgMu.Lock()
-		sub := c.msgSubs[opMsg.Id]
-		c.msgMu.Unlock()
-
-		if sub == nil {
-			// TODO: Handle removed sub
+		select {
+		case <-c.done:
 			return
+		case c.in <- msg:
+			break
 		}
 	}
 }
 
-func writeMessages(conn *websocket.Conn, msgs <-chan operationMessage) {
+func (c *Conn) writeMessages() {
+	for {
+		select {
+		case <-c.done:
+			return
+		case op := <-c.out:
+			err := c.wc.WriteJSON(&op)
+			if err != nil && websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+				return
+			}
+		}
+	}
+}
 
+func (c *Conn) send(ctx context.Context, msg operationMessage) {
+	select {
+	case <-c.done:
+		return
+	case <-ctx.Done():
+		return
+	case c.out <- msg:
+		return
+	}
+}
+
+// Close closes the underlying WebSocket connection.
+func (c *Conn) Close() error {
+	close(c.done)
+	return c.wc.Close()
 }
 
 type dialOpts struct {
@@ -122,13 +127,5 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 		return nil, err
 	}
 
-	c := &Conn{
-		wc:      wc,
-		done:    make(chan struct{}, 1),
-		msgs:    make(chan operationMessage, 1),
-		msgSubs: make(map[opId]chan<- *Response),
-	}
-	go c.init()
-
-	return c, nil
+	return newConn(wc), nil
 }
