@@ -118,6 +118,9 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 
 	// TODO: Handle resp
 	wc, _, err := d.DialContext(ctx, endpoint, dopts.headers)
+	if err != nil {
+		return nil, err
+	}
 
 	c := &Conn{
 		wc:      wc,
@@ -127,5 +130,5 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 	}
 	go c.init()
 
-	return c, err
+	return c, nil
 }
