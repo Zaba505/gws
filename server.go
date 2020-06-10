@@ -32,7 +32,7 @@ func WithCheckOrigin(f func(r *http.Request) bool) option {
 //
 func WithSubprotocols(protocols ...string) option {
 	return func(up *websocket.Upgrader) {
-		up.Subprotocols = protocols
+		up.Subprotocols = append(up.Subprotocols, protocols...)
 	}
 }
 
@@ -42,9 +42,76 @@ func WithSubprotocols(protocols ...string) option {
 //
 type MessageHandler func(context.Context, *Request) (*Response, error)
 
+type handler struct {
+	*websocket.Upgrader
+
+	msgHandler MessageHandler
+}
+
 // NewHandler configures an http.Handler, which will upgrade
 // incoming connections to websocket.
 //
 func NewHandler(h MessageHandler, opts ...option) http.Handler {
-	return nil
+	up := &websocket.Upgrader{
+		Subprotocols: []string{"graphql-ws"},
+	}
+
+	for _, opt := range opts {
+		opt(up)
+	}
+
+	return &handler{Upgrader: up, msgHandler: h}
+}
+
+func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
+	wc, err := h.Upgrade(w, req, req.Header)
+	if err != nil {
+		// TODO: Handle error
+		return
+	}
+	conn := newConn(wc)
+	defer conn.Close()
+
+	ctx, cancel := context.WithCancel(req.Context())
+	defer cancel()
+
+	// Handle messages
+	for msg := range conn.in {
+		switch msg.Type {
+		case gql_CONNECTION_INIT:
+			conn.send(ctx, operationMessage{Type: gql_CONNECTION_ACK})
+			break
+		case gql_START:
+			cp := msg.Payload.(*Request)
+
+			go handleRequest(ctx, h.msgHandler, msg.Id, cp, conn.out)
+			break
+		case gql_CONNECTION_TERMINATE:
+			cancel()
+			return
+		default:
+			// TODO: Handle
+			break
+		}
+	}
+}
+
+func handleRequest(ctx context.Context, h MessageHandler, id opId, req *Request, ops chan<- operationMessage) {
+	resp, err := h(ctx, req)
+	if err != nil {
+		// TODO
+	}
+
+	msg := operationMessage{
+		Id:      id,
+		Type:    gql_DATA,
+		Payload: resp,
+	}
+
+	select {
+	case <-ctx.Done():
+		return
+	case ops <- msg:
+		return
+	}
 }
