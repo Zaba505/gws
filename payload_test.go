@@ -1,8 +1,8 @@
 package graphql_transport_ws
 
 import (
+	"bytes"
 	"encoding/json"
-	"reflect"
 	"testing"
 )
 
@@ -40,15 +40,11 @@ func TestOpMessage_Unmarshal(t *testing.T) {
   "id": "1",
   "type": "data",
   "payload": {
-    "data": {
-      "hello": {
-        "world": "this is a test"
-      }
-    }
+    "data": {"hello":{"world":"this is a test"}}
   }
 }
 `,
-			Payload: &Response{Data: map[string]interface{}{"hello": map[string]interface{}{"world": "this is a test"}}},
+			Payload: &Response{Data: json.RawMessage([]byte(`{"hello":{"world":"this is a test"}}`))},
 		},
 		{
 			Name: "Unordered",
@@ -103,25 +99,25 @@ const benchReq = `{
 }`
 
 func BenchmarkOpMessage_Unmarshal(b *testing.B) {
-	b.Run("Via UnmarshalJSON", func(subB *testing.B) {
-		for i := 0; i < subB.N; i++ {
-			msg := new(operationMessage)
-			err := msg.UnmarshalJSON([]byte(benchReq))
-			if err != nil {
-				b.Error(err)
-			}
-		}
-	})
+  b.Run("Via UnmarshalJSON", func(subB *testing.B) {
+    for i := 0; i < subB.N; i++ {
+  		msg := new(operationMessage)
+  		err := msg.UnmarshalJSON([]byte(benchReq))
+  		if err != nil {
+  			subB.Error(err)
+  		}
+  	}
+  })
 
-	b.Run("Via json.Unmarshal", func(subB *testing.B) {
-		for i := 0; i < subB.N; i++ {
-			msg := new(operationMessage)
-			err := json.Unmarshal([]byte(benchReq), msg)
-			if err != nil {
-				b.Error(err)
-			}
-		}
-	})
+  b.Run("Via json.Unmarshal", func(subB *testing.B) {
+    for i := 0; i < subB.N; i++ {
+  		msg := new(operationMessage)
+  		err := json.Unmarshal([]byte(benchReq), msg)
+  		if err != nil {
+  			subB.Error(err)
+  		}
+  	}
+  })
 }
 
 func comparePayloads(t *testing.T, ex, out payload) {
@@ -149,8 +145,8 @@ func comparePayloads(t *testing.T, ex, out payload) {
 			return
 		}
 
-		if !reflect.DeepEqual(u, v) {
-			t.Log("response aren't equal")
+		if !bytes.Equal(u.Data, v.Data) {
+			t.Logf("expected data: %s, but got: %s", string(u.Data), string(v.Data))
 			t.Fail()
 			return
 		}
