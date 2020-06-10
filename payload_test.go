@@ -99,25 +99,25 @@ const benchReq = `{
 }`
 
 func BenchmarkOpMessage_Unmarshal(b *testing.B) {
-  b.Run("Via UnmarshalJSON", func(subB *testing.B) {
-    for i := 0; i < subB.N; i++ {
-  		msg := new(operationMessage)
-  		err := msg.UnmarshalJSON([]byte(benchReq))
-  		if err != nil {
-  			subB.Error(err)
-  		}
-  	}
-  })
+	b.Run("Via UnmarshalJSON", func(subB *testing.B) {
+		for i := 0; i < subB.N; i++ {
+			msg := new(operationMessage)
+			err := msg.UnmarshalJSON([]byte(benchReq))
+			if err != nil {
+				subB.Error(err)
+			}
+		}
+	})
 
-  b.Run("Via json.Unmarshal", func(subB *testing.B) {
-    for i := 0; i < subB.N; i++ {
-  		msg := new(operationMessage)
-  		err := json.Unmarshal([]byte(benchReq), msg)
-  		if err != nil {
-  			subB.Error(err)
-  		}
-  	}
-  })
+	b.Run("Via json.Unmarshal", func(subB *testing.B) {
+		for i := 0; i < subB.N; i++ {
+			msg := new(operationMessage)
+			err := json.Unmarshal([]byte(benchReq), msg)
+			if err != nil {
+				subB.Error(err)
+			}
+		}
+	})
 }
 
 func comparePayloads(t *testing.T, ex, out payload) {
