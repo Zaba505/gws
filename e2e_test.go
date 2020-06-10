@@ -36,6 +36,7 @@ func TestE2E(t *testing.T) {
 	}
 	err = json.Unmarshal(resp.Data, &testResp)
 	if err != nil {
+		t.Logf("response data: %s", string(resp.Data))
 		t.Errorf("unexpected error when unmarshalling response: %s", err)
 		return
 	}
