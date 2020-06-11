@@ -44,7 +44,7 @@ func (c *Conn) readMessages() {
 	for {
 		var msg operationMessage
 		err := c.wc.ReadJSON(&msg)
-		if err != nil && websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+		if err != nil {
 			return
 		}
 
@@ -64,7 +64,7 @@ func (c *Conn) writeMessages() {
 			return
 		case op := <-c.out:
 			err := c.wc.WriteJSON(&op)
-			if err != nil && websocket.IsUnexpectedCloseError(err, websocket.CloseNormalClosure, websocket.CloseAbnormalClosure) {
+			if err != nil {
 				return
 			}
 		}
