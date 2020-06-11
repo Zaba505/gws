@@ -98,3 +98,27 @@ func TestConcurrency(t *testing.T) {
 
 	wg.Wait()
 }
+
+func BenchmarkE2E(b *testing.B) {
+	srv := httptest.NewServer(NewHandler(testHandler))
+	defer srv.Close()
+
+	b.RunParallel(func(pb *testing.PB) {
+		conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+		if err != nil {
+			b.Errorf("unexpected error when dialing: %s", err)
+			return
+		}
+		defer conn.Close()
+
+		client := NewClient(conn)
+
+		for pb.Next() {
+			_, err := client.Query(context.Background(), &Request{Query: "{ hello { world } }"})
+			if err != nil {
+				b.Errorf("unexpected error when querying: %s", err)
+				return
+			}
+		}
+	})
+}

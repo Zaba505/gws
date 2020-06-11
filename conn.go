@@ -3,7 +3,6 @@ package graphql_transport_ws
 import (
 	"context"
 	"net/http"
-	"sync"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -16,12 +15,6 @@ type Conn struct {
 	in, out chan operationMessage
 
 	done chan struct{}
-
-	msgId uint64
-	msgs  chan operationMessage
-
-	msgMu   sync.Mutex
-	msgSubs map[opId]chan<- *Response
 }
 
 func newConn(wc *websocket.Conn) *Conn {
@@ -41,9 +34,9 @@ func newConn(wc *websocket.Conn) *Conn {
 func (c *Conn) readMessages() {
 	defer close(c.in)
 
+	msg := new(operationMessage)
 	for {
-		var msg operationMessage
-		err := c.wc.ReadJSON(&msg)
+		err := c.wc.ReadJSON(msg)
 		if err != nil {
 			return
 		}
@@ -51,7 +44,7 @@ func (c *Conn) readMessages() {
 		select {
 		case <-c.done:
 			return
-		case c.in <- msg:
+		case c.in <- *msg:
 			break
 		}
 	}
