@@ -4,24 +4,10 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/gorilla/websocket"
+	"nhooyr.io/websocket"
 )
 
-type option func(*websocket.Upgrader)
-
-// WithCheckOrigin returns true if the request Origin header is acceptable. If
-// CheckOrigin is nil, then a safe default is used: return false if the
-// Origin request header is present and the origin host is not equal to
-// request Host header.
-//
-// A CheckOrigin function should carefully validate the request origin to
-// prevent cross-site request forgery.
-//
-func WithCheckOrigin(f func(r *http.Request) bool) option {
-	return func(up *websocket.Upgrader) {
-		up.CheckOrigin = f
-	}
-}
+type option func(*websocket.AcceptOptions)
 
 // WithSubprotocols specifies the server's supported protocols in order of
 // preference. If this field is not nil, then the Upgrade method negotiates a
@@ -31,7 +17,7 @@ func WithCheckOrigin(f func(r *http.Request) bool) option {
 // handshake response).
 //
 func WithSubprotocols(protocols ...string) option {
-	return func(up *websocket.Upgrader) {
+	return func(up *websocket.AcceptOptions) {
 		up.Subprotocols = append(up.Subprotocols, protocols...)
 	}
 }
@@ -43,7 +29,7 @@ func WithSubprotocols(protocols ...string) option {
 type MessageHandler func(context.Context, *Request) (*Response, error)
 
 type handler struct {
-	*websocket.Upgrader
+	*websocket.AcceptOptions
 
 	msgHandler MessageHandler
 }
@@ -52,7 +38,7 @@ type handler struct {
 // incoming connections to websocket.
 //
 func NewHandler(h MessageHandler, opts ...option) http.Handler {
-	up := &websocket.Upgrader{
+	up := &websocket.AcceptOptions{
 		Subprotocols: []string{"graphql-ws"},
 	}
 
@@ -60,11 +46,11 @@ func NewHandler(h MessageHandler, opts ...option) http.Handler {
 		opt(up)
 	}
 
-	return &handler{Upgrader: up, msgHandler: h}
+	return &handler{AcceptOptions: up, msgHandler: h}
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
-	wc, err := h.Upgrade(w, req, req.Header)
+	wc, err := websocket.Accept(w, req, h.AcceptOptions)
 	if err != nil {
 		// TODO: Handle error
 		return

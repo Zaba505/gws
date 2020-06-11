@@ -1,11 +1,12 @@
 package graphql_transport_ws
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
-	"time"
 
-	"github.com/gorilla/websocket"
+	"nhooyr.io/websocket"
 )
 
 // Conn is a client connection that should be closed by the client.
@@ -36,7 +37,12 @@ func (c *Conn) readMessages() {
 
 	msg := new(operationMessage)
 	for {
-		err := c.wc.ReadJSON(msg)
+		_, b, err := c.wc.Read(context.TODO())
+		if err != nil {
+			return
+		}
+
+		err = msg.UnmarshalJSON(b)
 		if err != nil {
 			return
 		}
@@ -51,12 +57,22 @@ func (c *Conn) readMessages() {
 }
 
 func (c *Conn) writeMessages() {
+	buf := new(bytes.Buffer)
+	enc := json.NewEncoder(buf)
+
 	for {
 		select {
 		case <-c.done:
 			return
 		case op := <-c.out:
-			err := c.wc.WriteJSON(&op)
+			buf.Reset()
+
+			err := enc.Encode(&op)
+			if err != nil {
+				return
+			}
+
+			err = c.wc.Write(context.TODO(), websocket.MessageBinary, buf.Bytes())
 			if err != nil {
 				return
 			}
@@ -78,7 +94,7 @@ func (c *Conn) send(ctx context.Context, msg operationMessage) {
 // Close closes the underlying WebSocket connection.
 func (c *Conn) Close() error {
 	close(c.done)
-	return c.wc.Close()
+	return c.wc.Close(websocket.StatusNormalClosure, "closed")
 }
 
 type dialOpts struct {
@@ -109,13 +125,13 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 		opt.Set(dopts)
 	}
 
-	d := &websocket.Dialer{
-		HandshakeTimeout: 5 * time.Second,
-		Subprotocols:     []string{"graphql-ws"},
+	d := &websocket.DialOptions{
+		HTTPClient:   http.DefaultClient,
+		Subprotocols: []string{"graphql-ws"},
 	}
 
 	// TODO: Handle resp
-	wc, _, err := d.DialContext(ctx, endpoint, dopts.headers)
+	wc, _, err := websocket.Dial(ctx, endpoint, d)
 	if err != nil {
 		return nil, err
 	}
