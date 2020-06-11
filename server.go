@@ -62,15 +62,28 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 
 	// Handle messages
-	for msg := range conn.in {
+	msg := new(operationMessage)
+	for {
+		b, err := conn.read(ctx)
+		if err != nil {
+			// TODO
+			return
+		}
+
+		err = msg.UnmarshalJSON(b)
+		if err != nil {
+			// TODO
+			continue
+		}
+
 		switch msg.Type {
 		case gql_CONNECTION_INIT:
-			conn.send(ctx, operationMessage{Type: gql_CONNECTION_ACK})
+			conn.write(ctx, operationMessage{Type: gql_CONNECTION_ACK})
 			break
 		case gql_START:
 			cp := msg.Payload.(*Request)
 
-			go handleRequest(ctx, h.msgHandler, msg.Id, cp, conn.out)
+			go handleRequest(ctx, conn, h.msgHandler, msg.Id, cp)
 			break
 		case gql_CONNECTION_TERMINATE:
 			cancel()
@@ -82,7 +95,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func handleRequest(ctx context.Context, h MessageHandler, id opId, req *Request, ops chan<- operationMessage) {
+func handleRequest(ctx context.Context, conn *Conn, h MessageHandler, id opId, req *Request) {
 	resp, err := h(ctx, req)
 	if err != nil {
 		// TODO
@@ -94,10 +107,9 @@ func handleRequest(ctx context.Context, h MessageHandler, id opId, req *Request,
 		Payload: resp,
 	}
 
-	select {
-	case <-ctx.Done():
-		return
-	case ops <- msg:
+	err = conn.write(ctx, msg)
+	if err != nil {
+		// TODO: Handle error
 		return
 	}
 }

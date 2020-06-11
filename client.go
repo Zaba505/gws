@@ -3,6 +3,7 @@ package graphql_transport_ws
 import (
 	"context"
 	"strconv"
+	"sync"
 )
 
 // Client
@@ -30,17 +31,50 @@ type client struct {
 }
 
 func (c *client) run() {
-	c.conn.send(context.TODO(), operationMessage{Type: gql_CONNECTION_INIT})
+	c.conn.write(context.TODO(), operationMessage{Type: gql_CONNECTION_INIT})
 
-	msg := <-c.conn.in
-	if msg.Type != gql_CONNECTION_ACK {
+	b, err := c.conn.read(context.TODO())
+	if err != nil {
+		// TODO
+		return
+	}
+
+	ackMsg := new(operationMessage)
+	err = ackMsg.UnmarshalJSON(b)
+	if ackMsg.Type != gql_CONNECTION_ACK {
 		// TODO: Fail any in flight queries
 		return
 	}
 	// TODO: defer close(c.reqs) after all in-flight queries have been cancelled
 
+	var subsMu sync.Mutex
 	id := uint64(0)
 	subs := make(map[opId]chan<- qResp)
+
+	go func() {
+		msg := new(operationMessage)
+		for {
+			b, err := c.conn.read(context.TODO())
+			if err != nil {
+				// TODO
+				return
+			}
+
+			err = msg.UnmarshalJSON(b)
+			if err != nil {
+				// TODO
+				continue
+			}
+
+			subsMu.Lock()
+			respCh := subs[msg.Id]
+			delete(subs, msg.Id)
+			subsMu.Unlock()
+
+			respCh <- qResp{resp: msg.Payload.(*Response)}
+			close(respCh)
+		}
+	}()
 
 	for req := range c.reqs {
 		oid := opId(strconv.FormatUint(id, 10))
@@ -49,16 +83,16 @@ func (c *client) run() {
 			Type:    gql_START,
 			Payload: req,
 		}
-		subs[oid] = req.resp
 		id++
 
-		c.conn.out <- msg
+		subsMu.Lock()
+		subs[oid] = req.resp
+		subsMu.Unlock()
 
-		msg = <-c.conn.in
-		respCh := subs[msg.Id]
-		respCh <- qResp{resp: msg.Payload.(*Response)}
-		close(respCh)
-		delete(subs, msg.Id)
+		err := c.conn.write(context.TODO(), msg)
+		if err != nil {
+			break
+		}
 	}
 }
 

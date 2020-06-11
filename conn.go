@@ -5,90 +5,53 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sync"
 
 	"nhooyr.io/websocket"
 )
 
 // Conn is a client connection that should be closed by the client.
 type Conn struct {
-	wc *websocket.Conn
-
-	in, out chan operationMessage
+	wc      *websocket.Conn
+	bufPool *sync.Pool
 
 	done chan struct{}
 }
 
 func newConn(wc *websocket.Conn) *Conn {
 	c := &Conn{
-		wc:   wc,
-		in:   make(chan operationMessage),
-		out:  make(chan operationMessage),
+		wc: wc,
+		bufPool: &sync.Pool{
+			New: func() interface{} {
+				return new(bytes.Buffer)
+			},
+		},
 		done: make(chan struct{}, 1),
 	}
-
-	go c.readMessages()
-	go c.writeMessages()
 
 	return c
 }
 
-func (c *Conn) readMessages() {
-	defer close(c.in)
-
-	msg := new(operationMessage)
-	for {
-		_, b, err := c.wc.Read(context.TODO())
-		if err != nil {
-			return
-		}
-
-		err = msg.UnmarshalJSON(b)
-		if err != nil {
-			return
-		}
-
-		select {
-		case <-c.done:
-			return
-		case c.in <- *msg:
-			break
-		}
-	}
+func (c *Conn) read(ctx context.Context) ([]byte, error) {
+	_, b, err := c.wc.Read(ctx)
+	return b, err
 }
 
-func (c *Conn) writeMessages() {
-	buf := new(bytes.Buffer)
+func (c *Conn) write(ctx context.Context, msg operationMessage) error {
+	buf := c.bufPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		c.bufPool.Put(buf)
+	}()
+
 	enc := json.NewEncoder(buf)
 
-	for {
-		select {
-		case <-c.done:
-			return
-		case op := <-c.out:
-			buf.Reset()
-
-			err := enc.Encode(&op)
-			if err != nil {
-				return
-			}
-
-			err = c.wc.Write(context.TODO(), websocket.MessageBinary, buf.Bytes())
-			if err != nil {
-				return
-			}
-		}
+	err := enc.Encode(&msg)
+	if err != nil {
+		return err
 	}
-}
 
-func (c *Conn) send(ctx context.Context, msg operationMessage) {
-	select {
-	case <-c.done:
-		return
-	case <-ctx.Done():
-		return
-	case c.out <- msg:
-		return
-	}
+	return c.wc.Write(ctx, websocket.MessageBinary, buf.Bytes())
 }
 
 // Close closes the underlying WebSocket connection.
