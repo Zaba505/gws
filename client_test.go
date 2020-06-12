@@ -46,6 +46,7 @@ func TestFailedIO(t *testing.T) {
 		t.Fail()
 		return
 	}
+	t.Log(ioErr)
 }
 
 func TestUnexpectedAckMessage(t *testing.T) {
@@ -79,6 +80,7 @@ func TestUnexpectedAckMessage(t *testing.T) {
 		t.Fail()
 		return
 	}
+	t.Log(msgErr)
 }
 
 const (
