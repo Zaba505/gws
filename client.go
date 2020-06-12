@@ -18,13 +18,13 @@ type Client interface {
 // NewClient takes a connection and initializes a client over it.
 func NewClient(conn *Conn) Client {
 	c := &client{
-		conn: conn,
-		subs: make(map[opId]chan<- qResp),
-		done: make(chan struct{}, 1),
+		conn:  conn,
+		subs:  make(map[opId]chan<- qResp),
+		ready: make(chan struct{}, 1),
+		done:  make(chan struct{}, 1),
 	}
 
-	c.subsMu.Lock()
-	go c.run(c.subsMu.Unlock)
+	go c.run()
 
 	return c
 }
@@ -36,11 +36,12 @@ type client struct {
 	subsMu sync.Mutex
 	subs   map[opId]chan<- qResp
 
-	err  error
-	done chan struct{}
+	err   error
+	ready chan struct{}
+	done  chan struct{}
 }
 
-// ErrUnexpectedMessage
+// ErrUnexpectedMessage represents a unexpected message type.
 type ErrUnexpectedMessage struct {
 	// Expected was the expected message type.
 	Expected string
@@ -84,14 +85,13 @@ func (e ErrIO) Unwrap() error {
 
 const defaultTimeout = 5 * time.Second
 
-func (c *client) run(unlock func()) {
+func (c *client) run() {
 	defer close(c.done)
 
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	err := c.conn.write(ctx, operationMessage{Type: gql_CONNECTION_INIT})
 	cancel()
 	if err != nil {
-		unlock()
 		c.err = ErrIO{
 			Msg: "failed to send connection_init",
 			Err: err,
@@ -101,7 +101,6 @@ func (c *client) run(unlock func()) {
 
 	ctx, cancel = context.WithTimeout(context.Background(), defaultTimeout)
 	b, err := c.conn.read(ctx)
-	unlock()
 	cancel()
 	if err != nil {
 		c.err = ErrIO{
@@ -114,10 +113,7 @@ func (c *client) run(unlock func()) {
 	ackMsg := new(operationMessage)
 	err = ackMsg.UnmarshalJSON(b)
 	if err != nil {
-		c.err = ErrIO{
-			Msg: "malformed operation message received",
-			Err: err,
-		}
+		c.err = err
 		return
 	}
 	if ackMsg.Type != gql_CONNECTION_ACK {
@@ -127,6 +123,7 @@ func (c *client) run(unlock func()) {
 		}
 		return
 	}
+	close(c.ready)
 
 	msg := new(operationMessage)
 	for {
@@ -143,10 +140,7 @@ func (c *client) run(unlock func()) {
 
 		err = msg.UnmarshalJSON(b)
 		if err != nil {
-			c.err = ErrIO{
-				Msg: "malformed operation message received",
-				Err: err,
-			}
+			c.err = err
 			return
 		}
 
@@ -171,6 +165,15 @@ type qReq struct {
 }
 
 func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
+	select {
+	case <-ctx.Done():
+		break
+	case <-c.ready:
+		break
+	case <-c.done:
+		return nil, c.err
+	}
+
 	id := atomic.AddUint64(&c.id, 1)
 	oid := opId(strconv.FormatUint(id, 10))
 	msg := operationMessage{
@@ -188,7 +191,10 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 
 	err := c.conn.write(ctx, msg)
 	if err != nil {
-		return nil, err
+		return nil, ErrIO{
+			Msg: "failed to send query",
+			Err: err,
+		}
 	}
 
 	select {
