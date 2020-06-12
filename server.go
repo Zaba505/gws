@@ -74,7 +74,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 		err = msg.UnmarshalJSON(b)
 		if err != nil {
-			// TODO
+			conn.write(ctx, operationMessage{
+				Type:    gql_ERROR,
+				Payload: &ServerError{Msg: "received malformed message"},
+			})
 			continue
 		}
 
@@ -99,7 +102,12 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 func handleRequest(ctx context.Context, conn *Conn, h MessageHandler, id opId, req *Request) {
 	resp, err := h(ctx, req)
 	if err != nil {
-		// TODO
+		conn.write(ctx, operationMessage{
+			Id:      id,
+			Type:    gql_ERROR,
+			Payload: &ServerError{Msg: err.Error()},
+		})
+		return
 	}
 
 	msg := operationMessage{

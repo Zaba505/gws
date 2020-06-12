@@ -23,7 +23,7 @@ const (
 	gql_CONNECTION_KEEP_ALIVE = "connection_keep_alive"
 )
 
-// Request represents payload sent from the client.
+// Request represents a payload sent from the client.
 type Request struct {
 	Query         string                 `json:"query"`
 	Variables     map[string]interface{} `json:"variables"`
@@ -38,13 +38,26 @@ type Response struct {
 	Errors []json.RawMessage `json:"errors"`
 }
 
-// Payload represents either a Client or Server payload
+// ServerError represents a payload which is sent by the server if
+// it encounters a non-GraphQL resolver error.
+//
+type ServerError struct {
+	Msg string `json:"msg"`
+}
+
+// Error implements the error interface.
+func (e *ServerError) Error() string {
+	return fmt.Sprintf("internal server error: %s", e.Msg)
+}
+
+// payload represents either a Client or Server payload
 type payload interface {
 	isPayload()
 }
 
-func (*Request) isPayload()  {}
-func (*Response) isPayload() {}
+func (*Request) isPayload()     {}
+func (*Response) isPayload()    {}
+func (*ServerError) isPayload() {}
 
 type unknown map[string]interface{}
 
@@ -85,10 +98,14 @@ func (m *operationMessage) UnmarshalJSON(b []byte) error {
 		req := new(Request)
 		m.Payload = req
 		return json.Unmarshal(raw.Payload, req)
-	case gql_CONNECTION_ERROR, gql_CONNECTION_ACK, gql_DATA, gql_ERROR, gql_COMPLETE, gql_CONNECTION_KEEP_ALIVE:
+	case gql_CONNECTION_ERROR, gql_CONNECTION_ACK, gql_DATA, gql_COMPLETE, gql_CONNECTION_KEEP_ALIVE:
 		resp := new(Response)
 		m.Payload = resp
 		return json.Unmarshal(raw.Payload, resp)
+	case gql_ERROR:
+		serr := new(ServerError)
+		m.Payload = serr
+		return json.Unmarshal(raw.Payload, serr)
 	default:
 		return fmt.Errorf("unsupported message type: %s", raw.Type)
 	}

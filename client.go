@@ -169,7 +169,12 @@ func (c *client) run() {
 		respCh := c.subs[msg.Id]
 		c.subsMu.Unlock()
 
-		respCh <- qResp{resp: msg.Payload.(*Response)}
+		r, ok := msg.Payload.(*Response)
+		if !ok {
+			err = msg.Payload.(*ServerError)
+		}
+
+		respCh <- qResp{resp: r, err: err}
 
 		if msg.Type != gql_COMPLETE {
 			continue

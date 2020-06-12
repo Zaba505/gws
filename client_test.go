@@ -23,6 +23,34 @@ func newTestServer(f func(*Conn)) *httptest.Server {
 	}))
 }
 
+func TestHandleServerError(t *testing.T) {
+	srv := httptest.NewServer(NewHandler(errHandler))
+	defer srv.Close()
+
+	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	client := NewClient(conn)
+	_, err = client.Query(context.Background(), &Request{Query: "{ hello { world } }"})
+	if err == nil {
+		t.Log("expected an error")
+		t.Fail()
+		return
+	}
+
+	var serr *ServerError
+	if !errors.As(err, &serr) {
+		t.Log("wrong err type:", err)
+		t.Fail()
+		return
+	}
+	t.Log(serr)
+}
+
 func TestFailedIO(t *testing.T) {
 	srv := newTestServer(func(conn *Conn) {
 		conn.wc.CloseRead(context.Background())
