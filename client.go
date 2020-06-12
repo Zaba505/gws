@@ -18,10 +18,11 @@ type Client interface {
 // NewClient takes a connection and initializes a client over it.
 func NewClient(conn *Conn) Client {
 	c := &client{
-		conn:  conn,
-		subs:  make(map[opId]chan<- qResp),
-		ready: make(chan struct{}, 1),
-		done:  make(chan struct{}, 1),
+		conn:     conn,
+		subs:     make(map[opId]chan<- qResp),
+		complete: make(chan opId, 1),
+		ready:    make(chan struct{}, 1),
+		done:     make(chan struct{}, 1),
 	}
 
 	go c.run()
@@ -32,9 +33,10 @@ func NewClient(conn *Conn) Client {
 type client struct {
 	conn *Conn
 
-	id     uint64
-	subsMu sync.Mutex
-	subs   map[opId]chan<- qResp
+	id       uint64
+	subsMu   sync.Mutex
+	subs     map[opId]chan<- qResp
+	complete chan opId
 
 	err   error
 	ready chan struct{}
@@ -121,8 +123,19 @@ func (c *client) initConn(timeout time.Duration) error {
 	return nil
 }
 
+func (c *client) watchComplete() {
+	for id := range c.complete {
+		c.subsMu.Lock()
+		respCh := c.subs[id]
+		delete(c.subs, id)
+		c.subsMu.Unlock()
+		close(respCh)
+	}
+}
+
 func (c *client) run() {
 	defer close(c.done)
+	defer close(c.complete)
 
 	err := c.initConn(defaultTimeout)
 	if err != nil {
@@ -130,6 +143,8 @@ func (c *client) run() {
 		return
 	}
 	close(c.ready)
+
+	go c.watchComplete()
 
 	msg := new(operationMessage)
 	for {
@@ -152,11 +167,15 @@ func (c *client) run() {
 
 		c.subsMu.Lock()
 		respCh := c.subs[msg.Id]
-		delete(c.subs, msg.Id)
 		c.subsMu.Unlock()
 
 		respCh <- qResp{resp: msg.Payload.(*Response)}
-		close(respCh)
+
+		if msg.Type != gql_COMPLETE {
+			continue
+		}
+
+		c.complete <- msg.Id
 	}
 }
 

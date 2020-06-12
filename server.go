@@ -113,4 +113,10 @@ func handleRequest(ctx context.Context, conn *Conn, h MessageHandler, id opId, r
 		// TODO: Handle error
 		return
 	}
+
+	err = conn.write(ctx, operationMessage{Id: id, Type: gql_COMPLETE})
+	if err != nil {
+		// TODO: Handle error
+		return
+	}
 }
