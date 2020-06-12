@@ -1,5 +1,5 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/zaba505/graphql-transport-ws)](https://goreportcard.com/report/github.com/zaba505/graphql-transport-ws)
-[![build](https://github.com/Zaba505/graphql-transport-ws/workflows/Go/badge.svg)](https://github.com/Zaba505/graphql-transport-ws/actions)
+[![build](https://github.com/Zaba505/graphql-transport-ws/workflows/build/badge.svg)](https://github.com/Zaba505/graphql-transport-ws/actions)
 
 # WIP: graphql-transport-ws
 A WebSocket client and server for GraphQL.
