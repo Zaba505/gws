@@ -25,6 +25,8 @@ func WithSubprotocols(protocols ...string) option {
 // MessageHandler is a user provided function for handling
 // incoming GraphQL queries. All other "GraphQL over Websocket"
 // protocol messages are automatically handled internally.
+// All resolvers errors should be included in *Response and
+// any validation error should be returned as error.
 //
 type MessageHandler func(context.Context, *Request) (*Response, error)
 
