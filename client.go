@@ -187,7 +187,6 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 		Type:    gql_START,
 		Payload: req,
 	}
-	id++
 
 	respCh := make(chan qResp, 1)
 
