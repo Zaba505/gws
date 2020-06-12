@@ -51,6 +51,31 @@ func TestHandleServerError(t *testing.T) {
 	t.Log(serr)
 }
 
+func TestContextCancel(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+
+	srv := httptest.NewServer(NewHandler(func(_ context.Context, req *Request) (*Response, error) {
+		cancel()
+		return nil, nil
+	}))
+	defer srv.Close()
+
+	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	client := NewClient(conn)
+	_, err = client.Query(ctx, &Request{Query: "{ hello { world } }"})
+	if err == nil {
+		t.Log("expected an error")
+		t.Fail()
+		return
+	}
+}
+
 func TestFailedIO(t *testing.T) {
 	srv := newTestServer(func(conn *Conn) {
 		conn.wc.CloseRead(context.Background())

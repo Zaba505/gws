@@ -197,7 +197,7 @@ type qReq struct {
 func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 	select {
 	case <-ctx.Done():
-		break
+		return nil, ctx.Err()
 	case <-c.ready:
 		break
 	case <-c.done:
@@ -230,6 +230,7 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 	case <-c.done:
 		return nil, c.err
 	case <-ctx.Done():
+		c.conn.write(context.TODO(), operationMessage{Id: oid, Type: gql_STOP})
 		return nil, ctx.Err()
 	case resp := <-respCh:
 		return resp.resp, resp.err

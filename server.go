@@ -90,6 +90,8 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 
 			go handleRequest(ctx, conn, h.msgHandler, msg.Id, cp)
 			break
+		case gql_STOP:
+			// TODO: should stop be handle by the message handler
 		case gql_CONNECTION_TERMINATE:
 			return
 		default:
