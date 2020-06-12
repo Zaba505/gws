@@ -85,49 +85,55 @@ func (e ErrIO) Unwrap() error {
 
 const defaultTimeout = 5 * time.Second
 
-func (c *client) run() {
-	defer close(c.done)
-
+func (c *client) initConn(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 	err := c.conn.write(ctx, operationMessage{Type: gql_CONNECTION_INIT})
 	cancel()
 	if err != nil {
-		c.err = ErrIO{
+		return ErrIO{
 			Msg: "failed to send connection_init",
 			Err: err,
 		}
-		return
 	}
 
 	ctx, cancel = context.WithTimeout(context.Background(), defaultTimeout)
 	b, err := c.conn.read(ctx)
 	cancel()
 	if err != nil {
-		c.err = ErrIO{
+		return ErrIO{
 			Msg: "failed to receive connection_ack",
 			Err: err,
 		}
-		return
 	}
 
 	ackMsg := new(operationMessage)
 	err = ackMsg.UnmarshalJSON(b)
 	if err != nil {
-		c.err = err
-		return
+		return err
 	}
 	if ackMsg.Type != gql_CONNECTION_ACK {
-		c.err = ErrUnexpectedMessage{
+		return ErrUnexpectedMessage{
 			Expected: gql_CONNECTION_ACK,
 			Received: string(ackMsg.Type),
 		}
+	}
+
+	return nil
+}
+
+func (c *client) run() {
+	defer close(c.done)
+
+	err := c.initConn(defaultTimeout)
+	if err != nil {
+		c.err = err
 		return
 	}
 	close(c.ready)
 
 	msg := new(operationMessage)
 	for {
-		ctx, cancel = context.WithTimeout(context.Background(), defaultTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
 		b, err := c.conn.read(ctx)
 		cancel()
 		if err != nil {
