@@ -40,3 +40,36 @@ func TestWithHeaders(t *testing.T) {
 
 	conn.Close()
 }
+
+func TestTerminate(t *testing.T) {
+	srv := newTestServer(func(conn *Conn) {
+		defer conn.wc.CloseRead(context.Background())
+
+		b, err := conn.read(context.Background())
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		msg := new(operationMessage)
+		err = msg.UnmarshalJSON(b)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+
+		if msg.Type != gql_CONNECTION_TERMINATE {
+			t.Log("wrong message:", msg)
+			t.Fail()
+			return
+		}
+	})
+	defer srv.Close()
+
+	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	conn.Close()
+}

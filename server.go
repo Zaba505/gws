@@ -58,10 +58,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 	conn := newConn(wc)
-	defer conn.Close()
 
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()
+	defer wc.CloseRead(ctx)
 
 	// Handle messages
 	msg := new(operationMessage)
@@ -88,7 +88,6 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			go handleRequest(ctx, conn, h.msgHandler, msg.Id, cp)
 			break
 		case gql_CONNECTION_TERMINATE:
-			cancel()
 			return
 		default:
 			// TODO: Handle

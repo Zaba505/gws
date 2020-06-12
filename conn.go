@@ -57,6 +57,12 @@ func (c *Conn) write(ctx context.Context, msg operationMessage) error {
 // Close closes the underlying WebSocket connection.
 func (c *Conn) Close() error {
 	close(c.done)
+
+	err := c.write(context.Background(), operationMessage{Type: gql_CONNECTION_TERMINATE})
+	if err != nil {
+		return err
+	}
+
 	return c.wc.Close(websocket.StatusNormalClosure, "closed")
 }
 
