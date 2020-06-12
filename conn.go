@@ -90,6 +90,7 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 
 	d := &websocket.DialOptions{
 		HTTPClient:   http.DefaultClient,
+		HTTPHeader:   dopts.headers,
 		Subprotocols: []string{"graphql-ws"},
 	}
 
