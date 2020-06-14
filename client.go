@@ -241,9 +241,10 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 	case <-ctx.Done():
 		go stopReq(c.conn, oid, respCh)
 		return nil, ctx.Err()
-	case resp := <-respCh:
-		// TODO: Is it possible to receive the zero close resp if no data message
-		//			 has been received and the connection fails/closes.
+	case resp, ok := <-respCh:
+		if !ok {
+			return nil, c.err
+		}
 		return resp.resp, resp.err
 	}
 }
