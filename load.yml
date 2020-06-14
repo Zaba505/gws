@@ -1,0 +1,17 @@
+config:
+  target: "ws://127.0.0.1:4200/graphql"
+  phases:
+    - duration: 90
+      arrivalRate: 30
+  ws:
+    # Set a custom subprotocol:
+    subprotocols:
+      - graphql-ws
+scenarios:
+  - engine: "ws"
+    flow:
+      - send:
+          id: "1"
+          type: "start"
+          payload:
+            query: "{ hello { world } }"

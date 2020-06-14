@@ -3,7 +3,12 @@ package graphql_transport_ws
 import (
 	"context"
 	"errors"
+	"flag"
+	"net"
+	"net/http"
 	"net/http/httptest"
+	_ "net/http/pprof"
+	"strconv"
 	"testing"
 
 	"nhooyr.io/websocket"
@@ -133,4 +138,37 @@ func TestHandlerError(t *testing.T) {
 		return
 	}
 	t.Log(serr)
+}
+
+var (
+	loadTest = flag.Bool("load", false, "Run server load test")
+	port     = flag.Uint("port", 4200, "Specify local port for server to listen on")
+)
+
+func TestServerLoad(t *testing.T) {
+	if !*loadTest {
+		t.Skip("use artillery to load test server implementation")
+		return
+	}
+
+	mux := http.DefaultServeMux
+	mux.Handle("/graphql", NewHandler(func(ctx context.Context, req *Request) (*Response, error) {
+		return testHandler(ctx, req)
+	}))
+
+	srv := &http.Server{
+		Handler: mux,
+	}
+
+	l, err := net.Listen("tcp", "127.0.0.1:"+strconv.FormatUint(uint64(*port), 10))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	err = srv.Serve(l)
+	if err != nil {
+		t.Error(err)
+		return
+	}
 }
