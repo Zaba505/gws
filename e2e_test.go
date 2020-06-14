@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"sync"
 	"testing"
+	"time"
 )
 
 func testHandler(ctx context.Context, req *Request) (*Response, error) {
@@ -70,7 +71,10 @@ func TestConcurrency(t *testing.T) {
 		go func(c Client) {
 			defer wg.Done()
 
-			resp, err := c.Query(context.Background(), &Request{Query: "{ hello { world } }"})
+			ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+			defer cancel()
+
+			resp, err := c.Query(ctx, &Request{Query: "{ hello { world } }"})
 			if err != nil {
 				t.Errorf("unexpected error when querying: %s", err)
 				return

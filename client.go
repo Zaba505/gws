@@ -18,11 +18,10 @@ type Client interface {
 // NewClient takes a connection and initializes a client over it.
 func NewClient(conn *Conn) Client {
 	c := &client{
-		conn:     conn,
-		subs:     make(map[opId]chan<- qResp),
-		complete: make(chan opId, 1),
-		ready:    make(chan struct{}, 1),
-		done:     make(chan struct{}, 1),
+		conn:  conn,
+		subs:  make(map[opId]chan<- qResp),
+		ready: make(chan struct{}, 1),
+		done:  make(chan struct{}, 1),
 	}
 
 	go c.run()
@@ -33,10 +32,9 @@ func NewClient(conn *Conn) Client {
 type client struct {
 	conn *Conn
 
-	id       uint64
-	subsMu   sync.Mutex
-	subs     map[opId]chan<- qResp
-	complete chan opId
+	id     uint64
+	subsMu sync.Mutex
+	subs   map[opId]chan<- qResp
 
 	err   error
 	ready chan struct{}
@@ -123,19 +121,38 @@ func (c *client) initConn(timeout time.Duration) error {
 	return nil
 }
 
-func (c *client) watchComplete() {
-	for id := range c.complete {
-		c.subsMu.Lock()
-		respCh := c.subs[id]
-		delete(c.subs, id)
-		c.subsMu.Unlock()
+func (c *client) processMessages(msgs <-chan operationMessage) {
+	var err error
+	for msg := range msgs {
+		switch msg.Type {
+		case gql_DATA, gql_ERROR:
+			r, ok := msg.Payload.(*Response)
+			if !ok {
+				err, _ = msg.Payload.(*ServerError)
+			}
+
+			c.subsMu.Lock()
+			respCh := c.subs[msg.Id]
+			c.subsMu.Unlock()
+
+			respCh <- qResp{resp: r, err: err}
+		case gql_COMPLETE:
+			c.subsMu.Lock()
+			respCh := c.subs[msg.Id]
+			delete(c.subs, msg.Id)
+			c.subsMu.Unlock()
+
+			close(respCh)
+		}
+	}
+
+	for _, respCh := range c.subs {
 		close(respCh)
 	}
 }
 
 func (c *client) run() {
 	defer close(c.done)
-	defer close(c.complete)
 
 	err := c.initConn(defaultTimeout)
 	if err != nil {
@@ -144,7 +161,10 @@ func (c *client) run() {
 	}
 	close(c.ready)
 
-	go c.watchComplete()
+	msgs := make(chan operationMessage, 1)
+	defer close(msgs)
+
+	go c.processMessages(msgs)
 
 	msg := new(operationMessage)
 	for {
@@ -165,22 +185,11 @@ func (c *client) run() {
 			return
 		}
 
-		c.subsMu.Lock()
-		respCh := c.subs[msg.Id]
-		c.subsMu.Unlock()
+		msgs <- *msg
 
-		r, ok := msg.Payload.(*Response)
-		if !ok {
-			err = msg.Payload.(*ServerError)
-		}
-
-		respCh <- qResp{resp: r, err: err}
-
-		if msg.Type != gql_COMPLETE {
-			continue
-		}
-
-		c.complete <- msg.Id
+		msg.Id = ""
+		msg.Payload = nil
+		msg.Type = ""
 	}
 }
 
@@ -230,9 +239,26 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 	case <-c.done:
 		return nil, c.err
 	case <-ctx.Done():
-		c.conn.write(context.TODO(), operationMessage{Id: oid, Type: gql_STOP})
+		go stopReq(c.conn, oid, respCh)
 		return nil, ctx.Err()
 	case resp := <-respCh:
+		// TODO: Is it possible to receive the zero close resp if no data message
+		//			 has been received and the connection fails/closes.
 		return resp.resp, resp.err
 	}
+}
+
+func stopReq(conn *Conn, id opId, respCh <-chan qResp) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	err := conn.write(ctx, operationMessage{Id: id, Type: gql_STOP})
+	if err != nil {
+		return
+	}
+
+	// TODO: Should a local COMPLETE message be sent to processMessages?
+
+	// In case an in-flight DATA message was received it should be drained.
+	<-respCh
 }

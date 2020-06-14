@@ -23,6 +23,40 @@ func newTestServer(f func(*Conn)) *httptest.Server {
 	}))
 }
 
+func TestCloseDuringInFlightQuery(t *testing.T) {
+	var conn *Conn
+	var err error
+
+	srv := httptest.NewServer(NewHandler(func(_ context.Context, req *Request) (*Response, error) {
+		conn.Close()
+		return nil, nil
+	}))
+	defer srv.Close()
+
+	conn, err = Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	client := NewClient(conn)
+	resp, err := client.Query(ctx, &Request{Query: "{ hello { world } }"})
+	if err == nil {
+		t.Log("expected an error")
+		t.Fail()
+		return
+	}
+
+	if resp != nil {
+		t.Log("unexpected response", resp)
+		t.Fail()
+		return
+	}
+}
+
 func TestHandleServerError(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(errHandler))
 	defer srv.Close()
