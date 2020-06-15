@@ -264,7 +264,7 @@ func ExampleNewClient_query() {
 	// Now, exampleResp.Hello.World would be your query result.
 }
 
-func ExampleNewClient_concurrent_queries() {
+func ExampleNewClient_concurrent() {
 	conn, err := Dial(context.TODO(), "ws://example.com")
 	if err != nil {
 		// Make sure to handle the error
