@@ -191,7 +191,7 @@ func TestServerLoad(t *testing.T) {
 	}
 }
 
-func ExampleHandler() {
+func ExampleNewHandler() {
 	h := func(ctx context.Context, req *Request) (*Response, error) {
 		// Should observe ctx in case it gets cancelled.
 
