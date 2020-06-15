@@ -58,7 +58,7 @@ func (c *Conn) write(ctx context.Context, msg operationMessage) error {
 func (c *Conn) Close() error {
 	close(c.done)
 
-	err := c.write(context.Background(), operationMessage{Type: gql_CONNECTION_TERMINATE})
+	err := c.write(context.Background(), operationMessage{Type: gqlConnectionTerminate})
 	if err != nil {
 		return err
 	}
@@ -73,7 +73,7 @@ type dialOpts struct {
 	threshold   int
 }
 
-// DialOption
+// DialOption configures how we set up the connection.
 type DialOption interface {
 	SetDial(*dialOpts)
 }
@@ -174,7 +174,10 @@ func WithHeaders(headers http.Header) DialOption {
 	})
 }
 
-// Dial
+// Dial creates a connection to the given endpoint. By default, it's a non-blocking
+// dial (the function won't wait for connections to be established, and connecting
+// happens in the background).
+//
 func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, error) {
 	dopts := &dialOpts{
 		client: http.DefaultClient,

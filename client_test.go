@@ -141,7 +141,7 @@ func TestUnexpectedAckMessage(t *testing.T) {
 	srv := newTestServer(func(conn *Conn) {
 		conn.wc.CloseRead(context.Background())
 
-		conn.write(context.Background(), operationMessage{Type: gql_DATA})
+		conn.write(context.Background(), operationMessage{Type: gqlData})
 	})
 	defer srv.Close()
 
@@ -194,7 +194,7 @@ func TestMalformedMessage(t *testing.T) {
 			Handler: func(conn *Conn) {
 				conn.wc.CloseRead(context.Background())
 
-				conn.write(context.Background(), operationMessage{Type: gql_CONNECTION_ACK})
+				conn.write(context.Background(), operationMessage{Type: gqlConnectionAck})
 				conn.wc.Write(context.Background(), websocket.MessageBinary, []byte(badDataMsg))
 			},
 		},

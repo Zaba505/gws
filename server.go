@@ -91,24 +91,24 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		err = msg.UnmarshalJSON(b)
 		if err != nil {
 			conn.write(ctx, operationMessage{
-				Type:    gql_ERROR,
+				Type:    gqlError,
 				Payload: &ServerError{Msg: "received malformed message"},
 			})
 			continue
 		}
 
 		switch msg.Type {
-		case gql_CONNECTION_INIT:
-			conn.write(ctx, operationMessage{Type: gql_CONNECTION_ACK})
+		case gqlConnectionInit:
+			conn.write(ctx, operationMessage{Type: gqlConnectionAck})
 			break
-		case gql_START:
+		case gqlStart:
 			cp := msg.Payload.(*Request)
 
-			go handleRequest(ctx, conn, h.msgHandler, msg.Id, cp)
+			go handleRequest(ctx, conn, h.msgHandler, msg.ID, cp)
 			break
-		case gql_STOP:
+		case gqlStop:
 			// TODO: should stop be handle by the message handler
-		case gql_CONNECTION_TERMINATE:
+		case gqlConnectionTerminate:
 			return
 		default:
 			// TODO: Handle
@@ -117,20 +117,20 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func handleRequest(ctx context.Context, conn *Conn, h MessageHandler, id opId, req *Request) {
+func handleRequest(ctx context.Context, conn *Conn, h MessageHandler, id opID, req *Request) {
 	resp, err := h(ctx, req)
 	if err != nil {
 		conn.write(ctx, operationMessage{
-			Id:      id,
-			Type:    gql_ERROR,
+			ID:      id,
+			Type:    gqlError,
 			Payload: &ServerError{Msg: err.Error()},
 		})
 		return
 	}
 
 	msg := operationMessage{
-		Id:      id,
-		Type:    gql_DATA,
+		ID:      id,
+		Type:    gqlData,
 		Payload: resp,
 	}
 
@@ -140,7 +140,7 @@ func handleRequest(ctx context.Context, conn *Conn, h MessageHandler, id opId, r
 		return
 	}
 
-	err = conn.write(ctx, operationMessage{Id: id, Type: gql_COMPLETE})
+	err = conn.write(ctx, operationMessage{ID: id, Type: gqlComplete})
 	if err != nil {
 		// TODO: Handle error
 		return

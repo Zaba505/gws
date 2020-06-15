@@ -43,7 +43,7 @@ func TestErrMessage(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = conn.write(context.Background(), operationMessage{Type: gql_CONNECTION_INIT})
+	err = conn.write(context.Background(), operationMessage{Type: gqlConnectionInit})
 	if err != nil {
 		t.Error(err)
 		return
@@ -106,7 +106,7 @@ func TestHandlerError(t *testing.T) {
 	}
 	defer conn.Close()
 
-	err = conn.write(context.Background(), operationMessage{Type: gql_CONNECTION_INIT})
+	err = conn.write(context.Background(), operationMessage{Type: gqlConnectionInit})
 	if err != nil {
 		t.Error(err)
 		return
@@ -120,8 +120,8 @@ func TestHandlerError(t *testing.T) {
 	}
 
 	err = conn.write(context.Background(), operationMessage{
-		Id:      "1",
-		Type:    gql_START,
+		ID:      "1",
+		Type:    gqlStart,
 		Payload: &Request{Query: "{ hello { world } }"},
 	})
 	if err != nil {

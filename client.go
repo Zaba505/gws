@@ -19,7 +19,7 @@ type Client interface {
 func NewClient(conn *Conn) Client {
 	c := &client{
 		conn:  conn,
-		subs:  make(map[opId]chan<- qResp),
+		subs:  make(map[opID]chan<- qResp),
 		ready: make(chan struct{}, 1),
 		done:  make(chan struct{}, 1),
 	}
@@ -34,7 +34,7 @@ type client struct {
 
 	id     uint64
 	subsMu sync.Mutex
-	subs   map[opId]chan<- qResp
+	subs   map[opID]chan<- qResp
 
 	err   error
 	ready chan struct{}
@@ -87,7 +87,7 @@ const defaultTimeout = 5 * time.Second
 
 func (c *client) initConn(timeout time.Duration) error {
 	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
-	err := c.conn.write(ctx, operationMessage{Type: gql_CONNECTION_INIT})
+	err := c.conn.write(ctx, operationMessage{Type: gqlConnectionInit})
 	cancel()
 	if err != nil {
 		return ErrIO{
@@ -111,9 +111,9 @@ func (c *client) initConn(timeout time.Duration) error {
 	if err != nil {
 		return err
 	}
-	if ackMsg.Type != gql_CONNECTION_ACK {
+	if ackMsg.Type != gqlConnectionAck {
 		return ErrUnexpectedMessage{
-			Expected: gql_CONNECTION_ACK,
+			Expected: gqlConnectionAck,
 			Received: string(ackMsg.Type),
 		}
 	}
@@ -125,21 +125,21 @@ func (c *client) processMessages(msgs <-chan operationMessage) {
 	var err error
 	for msg := range msgs {
 		switch msg.Type {
-		case gql_DATA, gql_ERROR:
+		case gqlData, gqlError:
 			r, ok := msg.Payload.(*Response)
 			if !ok {
 				err, _ = msg.Payload.(*ServerError)
 			}
 
 			c.subsMu.Lock()
-			respCh := c.subs[msg.Id]
+			respCh := c.subs[msg.ID]
 			c.subsMu.Unlock()
 
 			respCh <- qResp{resp: r, err: err}
-		case gql_COMPLETE:
+		case gqlComplete:
 			c.subsMu.Lock()
-			respCh := c.subs[msg.Id]
-			delete(c.subs, msg.Id)
+			respCh := c.subs[msg.ID]
+			delete(c.subs, msg.ID)
 			c.subsMu.Unlock()
 
 			close(respCh)
@@ -190,7 +190,7 @@ func (c *client) run() {
 
 		msgs <- *msg
 
-		msg.Id = ""
+		msg.ID = ""
 		msg.Payload = nil
 		msg.Type = ""
 	}
@@ -217,10 +217,10 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 	}
 
 	id := atomic.AddUint64(&c.id, 1)
-	oid := opId(strconv.FormatUint(id, 10))
+	oid := opID(strconv.FormatUint(id, 10))
 	msg := operationMessage{
-		Id:      oid,
-		Type:    gql_START,
+		ID:      oid,
+		Type:    gqlStart,
 		Payload: req,
 	}
 
@@ -252,11 +252,11 @@ func (c *client) Query(ctx context.Context, req *Request) (*Response, error) {
 	}
 }
 
-func stopReq(conn *Conn, id opId, respCh <-chan qResp) {
+func stopReq(conn *Conn, id opID, respCh <-chan qResp) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	err := conn.write(ctx, operationMessage{Id: id, Type: gql_STOP})
+	err := conn.write(ctx, operationMessage{ID: id, Type: gqlStop})
 	if err != nil {
 		return
 	}

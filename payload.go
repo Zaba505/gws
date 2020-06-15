@@ -9,18 +9,18 @@ type reqType string
 
 const (
 	// Client -> Server
-	gql_CONNECTION_INIT      reqType = "connection_init"
-	gql_START                        = "start"
-	gql_STOP                         = "stop"
-	gql_CONNECTION_TERMINATE         = "connection_terminate"
+	gqlConnectionInit      reqType = "connection_init"
+	gqlStart                       = "start"
+	gqlStop                        = "stop"
+	gqlConnectionTerminate         = "connection_terminate"
 
 	// Server -> Client
-	gql_CONNECTION_ERROR      = "connection_error"
-	gql_CONNECTION_ACK        = "connection_ack"
-	gql_DATA                  = "data"
-	gql_ERROR                 = "error"
-	gql_COMPLETE              = "complete"
-	gql_CONNECTION_KEEP_ALIVE = "connection_keep_alive"
+	gqlConnectionError     = "connection_error"
+	gqlConnectionAck       = "connection_ack"
+	gqlData                = "data"
+	gqlError               = "error"
+	gqlComplete            = "complete"
+	gqlConnectionKeepAlive = "connection_keep_alive"
 )
 
 // Request represents a payload sent from the client.
@@ -63,19 +63,19 @@ type unknown map[string]interface{}
 
 func (unknown) isPayload() {}
 
-// opId represents a unique id per user request
-type opId string
+// opID represents a unique id per user request
+type opID string
 
 // operationMessage represents an Apollo "GraphQL over WebSockets Protocol" message
 type operationMessage struct {
-	Id      opId    `json:"id,omitempty"`
+	ID      opID    `json:"id,omitempty"`
 	Type    reqType `json:"type"`
 	Payload payload `json:"payload,omitempty"`
 }
 
 func (m *operationMessage) UnmarshalJSON(b []byte) error {
 	var raw struct {
-		Id      opId            `json:"id,omitempty"`
+		ID      opID            `json:"id,omitempty"`
 		Type    reqType         `json:"type"`
 		Payload json.RawMessage `json:"payload,omitempty"`
 	}
@@ -85,8 +85,8 @@ func (m *operationMessage) UnmarshalJSON(b []byte) error {
 	}
 
 	m.Type = raw.Type
-	if raw.Id != "" {
-		m.Id = raw.Id
+	if raw.ID != "" {
+		m.ID = raw.ID
 	}
 
 	if len(raw.Payload) == 0 {
@@ -94,15 +94,15 @@ func (m *operationMessage) UnmarshalJSON(b []byte) error {
 	}
 
 	switch raw.Type {
-	case gql_CONNECTION_INIT, gql_START, gql_STOP, gql_CONNECTION_TERMINATE:
+	case gqlConnectionInit, gqlStart, gqlStop, gqlConnectionTerminate:
 		req := new(Request)
 		m.Payload = req
 		return json.Unmarshal(raw.Payload, req)
-	case gql_CONNECTION_ERROR, gql_CONNECTION_ACK, gql_DATA, gql_COMPLETE, gql_CONNECTION_KEEP_ALIVE:
+	case gqlConnectionError, gqlConnectionAck, gqlData, gqlComplete, gqlConnectionKeepAlive:
 		resp := new(Response)
 		m.Payload = resp
 		return json.Unmarshal(raw.Payload, resp)
-	case gql_ERROR:
+	case gqlError:
 		serr := new(ServerError)
 		m.Payload = serr
 		return json.Unmarshal(raw.Payload, serr)

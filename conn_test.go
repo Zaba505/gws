@@ -61,7 +61,7 @@ func TestTerminate(t *testing.T) {
 			return
 		}
 
-		if msg.Type != gql_CONNECTION_TERMINATE {
+		if msg.Type != gqlConnectionTerminate {
 			t.Log("wrong message:", msg)
 			t.Fail()
 			return
