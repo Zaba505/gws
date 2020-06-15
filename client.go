@@ -146,6 +146,9 @@ func (c *client) processMessages(msgs <-chan operationMessage) {
 		}
 	}
 
+	c.subsMu.Lock()
+	defer c.subsMu.Unlock()
+
 	for _, respCh := range c.subs {
 		close(respCh)
 	}
