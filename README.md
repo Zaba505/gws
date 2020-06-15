@@ -1,7 +1,7 @@
-[![Go Report Card](https://goreportcard.com/badge/github.com/zaba505/graphql-transport-ws)](https://goreportcard.com/report/github.com/zaba505/graphql-transport-ws)
-[![build](https://github.com/Zaba505/graphql-transport-ws/workflows/build/badge.svg)](https://github.com/Zaba505/graphql-transport-ws/actions)
+[![Go Report Card](https://goreportcard.com/badge/github.com/zaba505/gws)](https://goreportcard.com/report/github.com/zaba505/gws)
+[![build](https://github.com/Zaba505/gws/workflows/build/badge.svg)](https://github.com/Zaba505/gws/actions)
 
-# WIP: graphql-transport-ws
+# WIP: gws
 A WebSocket client and server for GraphQL.
 
 `graphql-transport-ws` implements Apollos' "GraphQL over WebSocket" protocol,
