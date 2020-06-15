@@ -14,6 +14,24 @@ import (
 	"nhooyr.io/websocket"
 )
 
+func TestServerOptions(t *testing.T) {
+	opts := []ServerOption{
+		WithOrigins("test.example.com"),
+		WithCompression(CompressionDisabled, 0),
+	}
+
+	srv := httptest.NewServer(NewHandler(testHandler, opts...))
+	defer srv.Close()
+
+	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	conn.Close()
+}
+
 func TestErrMessage(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(testHandler))
 	defer srv.Close()
