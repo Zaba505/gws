@@ -67,7 +67,10 @@ func (c *Conn) Close() error {
 }
 
 type dialOpts struct {
-	headers http.Header
+	client      *http.Client
+	headers     http.Header
+	compression CompressionMode
+	threshold   int
 }
 
 // DialOption
@@ -80,7 +83,69 @@ type optionFn func(*dialOpts)
 
 func (f optionFn) Set(opts *dialOpts) { f(opts) }
 
-// WithHeaders
+// CompressionMode represents the modes available to the deflate extension. See
+// https://tools.ietf.org/html/rfc7692
+//
+// A compatibility layer is implemented for the older deflate-frame extension
+// used by safari. See
+// https://tools.ietf.org/html/draft-tyoshino-hybi-websocket-perframe-deflate-06
+// It will work the same in every way except that we cannot signal to the peer
+// we want to use no context takeover on our side, we can only signal that they
+// should. It is however currently disabled due to Safari bugs. See
+// https://github.com/nhooyr/websocket/issues/218
+//
+type CompressionMode websocket.CompressionMode
+
+const (
+	// CompressionNoContextTakeover grabs a new flate.Reader and flate.Writer as needed
+	// for every message. This applies to both server and client side.
+	//
+	// This means less efficient compression as the sliding window from previous messages
+	// will not be used but the memory overhead will be lower if the connections
+	// are long lived and seldom used.
+	//
+	// The message will only be compressed if greater than 512 bytes.
+	//
+	CompressionNoContextTakeover CompressionMode = iota
+
+	// CompressionContextTakeover uses a flate.Reader and flate.Writer per connection.
+	// This enables reusing the sliding window from previous messages.
+	// As most WebSocket protocols are repetitive, this can be very efficient.
+	// It carries an overhead of 8 kB for every connection compared to CompressionNoContextTakeover.
+	//
+	// If the peer negotiates NoContextTakeover on the client or server side, it will be
+	// used instead as this is required by the RFC.
+	//
+	CompressionContextTakeover
+
+	// CompressionDisabled disables the deflate extension.
+	//
+	// Use this if you are using a predominantly binary protocol with very
+	// little duplication in between messages or CPU and memory are more
+	// important than bandwidth.
+	//
+	CompressionDisabled
+)
+
+// WithCompression configures compression over the WebSocket.
+// By default, compression is disabled and for now is considered
+// an experimental feature.
+//
+func WithCompression(mode CompressionMode, threshold int) DialOption {
+	return optionFn(func(opts *dialOpts) {
+		opts.compression = mode
+		opts.threshold = threshold
+	})
+}
+
+// WithHTTPClient provides an http.Client to override the default one used.
+func WithHTTPClient(client *http.Client) DialOption {
+	return optionFn(func(opts *dialOpts) {
+		opts.client = client
+	})
+}
+
+// WithHeaders adds custom headers to every dial HTTP request.
 func WithHeaders(headers http.Header) DialOption {
 	return optionFn(func(opts *dialOpts) {
 		opts.headers = headers
@@ -89,15 +154,20 @@ func WithHeaders(headers http.Header) DialOption {
 
 // Dial
 func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, error) {
-	dopts := new(dialOpts)
+	dopts := &dialOpts{
+		client: http.DefaultClient,
+	}
+
 	for _, opt := range opts {
 		opt.Set(dopts)
 	}
 
 	d := &websocket.DialOptions{
-		HTTPClient:   http.DefaultClient,
-		HTTPHeader:   dopts.headers,
-		Subprotocols: []string{"graphql-ws"},
+		HTTPClient:           dopts.client,
+		HTTPHeader:           dopts.headers,
+		Subprotocols:         []string{"graphql-ws"},
+		CompressionMode:      websocket.CompressionMode(dopts.compression),
+		CompressionThreshold: dopts.threshold,
 	}
 
 	// TODO: Handle resp

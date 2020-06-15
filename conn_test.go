@@ -8,17 +8,18 @@ import (
 	"testing"
 )
 
-func TestWithHeaders(t *testing.T) {
+func TestWithDialOptions(t *testing.T) {
 	aOpts := &websocket.AcceptOptions{
 		Subprotocols: []string{"graphql-ws"},
 	}
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		_, err := websocket.Accept(w, req, aOpts)
+		wc, err := websocket.Accept(w, req, aOpts)
 		if err != nil {
 			t.Fail()
 			return
 		}
+		wc.CloseRead(context.Background())
 		m := req.Header.Get("Hello")
 		if m != "World" {
 			t.Fail()
@@ -30,7 +31,9 @@ func TestWithHeaders(t *testing.T) {
 	headers.Add("Hello", "World")
 
 	opts := []DialOption{
+		WithHTTPClient(http.DefaultClient),
 		WithHeaders(headers),
+		WithCompression(CompressionDisabled, 0),
 	}
 	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String(), opts...)
 	if err != nil {
