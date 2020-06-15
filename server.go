@@ -17,21 +17,27 @@ type MessageHandler func(context.Context, *Request) (*Response, error)
 
 type options struct {
 	origins   []string
-	mode      websocket.CompressionMode
+	mode      CompressionMode
 	threshold int
 }
 
 // ServerOption allows the user to configure the handler.
-type ServerOption func(*options)
+type ServerOption interface {
+	SetServer(*options)
+}
+
+type soptFn func(*options)
+
+func (f soptFn) SetServer(opts *options) { f(opts) }
 
 // WithOrigins lists the host patterns for authorized origins.
 // The request host is always authorized. Use this to allow
 // cross origin WebSockets.
 //
 func WithOrigins(origins ...string) ServerOption {
-	return func(opts *options) {
+	return soptFn(func(opts *options) {
 		opts.origins = origins
-	}
+	})
 }
 
 type handler struct {
@@ -47,14 +53,14 @@ func NewHandler(h MessageHandler, opts ...ServerOption) http.Handler {
 	sopts := &options{}
 
 	for _, opt := range opts {
-		opt(sopts)
+		opt.SetServer(sopts)
 	}
 
 	return &handler{
 		wcOptions: &websocket.AcceptOptions{
 			Subprotocols:         []string{"graphql-ws"},
 			OriginPatterns:       sopts.origins,
-			CompressionMode:      sopts.mode,
+			CompressionMode:      websocket.CompressionMode(sopts.mode),
 			CompressionThreshold: sopts.threshold,
 		},
 		msgHandler: h,

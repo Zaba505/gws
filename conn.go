@@ -75,13 +75,12 @@ type dialOpts struct {
 
 // DialOption
 type DialOption interface {
-	// Set
-	Set(*dialOpts)
+	SetDial(*dialOpts)
 }
 
 type optionFn func(*dialOpts)
 
-func (f optionFn) Set(opts *dialOpts) { f(opts) }
+func (f optionFn) SetDial(opts *dialOpts) { f(opts) }
 
 // CompressionMode represents the modes available to the deflate extension. See
 // https://tools.ietf.org/html/rfc7692
@@ -127,15 +126,38 @@ const (
 	CompressionDisabled
 )
 
+// ConnOption represents a configuration that applies symmetrically
+// on both sides, client and server.
+//
+type ConnOption interface {
+	DialOption
+	ServerOption
+}
+
+type compression struct {
+	mode      CompressionMode
+	threshold int
+}
+
+func (opt compression) SetDial(opts *dialOpts) {
+	opts.compression = opt.mode
+	opts.threshold = opt.threshold
+}
+
+func (opt compression) SetServer(opts *options) {
+	opts.mode = opt.mode
+	opts.threshold = opt.threshold
+}
+
 // WithCompression configures compression over the WebSocket.
 // By default, compression is disabled and for now is considered
 // an experimental feature.
 //
-func WithCompression(mode CompressionMode, threshold int) DialOption {
-	return optionFn(func(opts *dialOpts) {
-		opts.compression = mode
-		opts.threshold = threshold
-	})
+func WithCompression(mode CompressionMode, threshold int) ConnOption {
+	return compression{
+		mode:      mode,
+		threshold: threshold,
+	}
 }
 
 // WithHTTPClient provides an http.Client to override the default one used.
@@ -159,7 +181,7 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 	}
 
 	for _, opt := range opts {
-		opt.Set(dopts)
+		opt.SetDial(dopts)
 	}
 
 	d := &websocket.DialOptions{
