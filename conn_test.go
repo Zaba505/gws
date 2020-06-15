@@ -76,3 +76,16 @@ func TestTerminate(t *testing.T) {
 	}
 	conn.Close()
 }
+
+func ExampleDial() {
+	conn, err := Dial(context.TODO(), "ws://example.com")
+	if err != nil {
+		// Make sure to handle the error
+		return
+	}
+	defer conn.Close()
+
+	// Create a single client with the connection.
+	// There is no need to create multiple connections or clients
+	// because it will all be managed for you.
+}

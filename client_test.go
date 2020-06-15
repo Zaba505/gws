@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -229,5 +230,72 @@ func TestMalformedMessage(t *testing.T) {
 				return
 			}
 		})
+	}
+}
+
+func ExampleClient_Query() {
+	conn, err := Dial(context.TODO(), "ws://example.com")
+	if err != nil {
+		// Make sure to handle the error
+		return
+	}
+	defer conn.Close()
+
+	client := NewClient(conn)
+
+	resp, err := client.Query(context.TODO(), &Request{Query: "{ hello { world } }"})
+	if err != nil {
+		// Remember, always handle errors
+		return
+	}
+	// Always check resp.Errors
+
+	var exampleResp struct {
+		Hello struct {
+			World string `json:"world"`
+		} `json:"hello"`
+	}
+
+	err = json.Unmarshal(resp.Data, &exampleResp)
+	if err != nil {
+		return
+	}
+
+	// Now, exampleResp.Hello.World would be your query result.
+}
+
+func ExampleClient_Query_concurrent() {
+	conn, err := Dial(context.TODO(), "ws://example.com")
+	if err != nil {
+		// Make sure to handle the error
+		return
+	}
+	defer conn.Close()
+
+	// Performing queries is completely concurrent safe.
+	client := NewClient(conn)
+
+	respCh := make(chan *Response)
+	go func() {
+		resp, err := client.Query(context.TODO(), &Request{Query: "{ hello { world } }"})
+		if err != nil {
+			// Remember, always handle errors
+			return
+		}
+		respCh <- resp
+	}()
+
+	go func() {
+		resp, err := client.Query(context.TODO(), &Request{Query: "{ hello { world } }"})
+		if err != nil {
+			// Remember, always handle errors
+			return
+		}
+		respCh <- resp
+	}()
+
+	for resp := range respCh {
+		// Always check resp.Errors
+		fmt.Println(resp)
 	}
 }

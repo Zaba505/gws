@@ -190,3 +190,24 @@ func TestServerLoad(t *testing.T) {
 		return
 	}
 }
+
+func ExampleHandler() {
+	h := func(ctx context.Context, req *Request) (*Response, error) {
+		// Should observe ctx in case it gets cancelled.
+
+		// Use your choice of a GraphQL runtime to execute the query
+		// Then, return the results JSON encoded with a *Response.
+		return &Response{Data: []byte(`{"hello":{"world":"this is example data"}}`)}, nil
+	}
+
+	// Simply register the handler with a http mux of your choice
+	// and it will handle the rest.
+	//
+	http.Handle("graphql", NewHandler(MessageHandler(h)))
+
+	err := http.ListenAndServe(":80", nil)
+	if err != nil {
+		// Always handle your errors
+		return
+	}
+}
