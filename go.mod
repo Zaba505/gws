@@ -1,4 +1,4 @@
-module github.com/Zaba505/graphql-transport-ws
+module github.com/Zaba505/gws
 
 go 1.14
 

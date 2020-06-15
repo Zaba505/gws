@@ -1,4 +1,4 @@
-package graphql_transport_ws
+package gws
 
 import (
 	"bytes"
