@@ -21,7 +21,7 @@ func newTestServer(f func(*Conn)) *httptest.Server {
 
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		conn, _ := websocket.Accept(w, req, opts)
-		f(newConn(conn))
+		f(newConn(conn, MessageBinary))
 	}))
 }
 

@@ -72,6 +72,7 @@ type options struct {
 	origins   []string
 	mode      CompressionMode
 	threshold int
+	typ       MessageType
 }
 
 // ServerOption allows the user to configure the handler.
@@ -97,13 +98,16 @@ type handler struct {
 	Handler
 
 	wcOptions *websocket.AcceptOptions
+	mtyp      MessageType
 }
 
 // NewHandler configures an http.Handler, which will upgrade
 // incoming connections to WebSocket and serve the "graphql-ws" subprotocol.
 //
 func NewHandler(h Handler, opts ...ServerOption) http.Handler {
-	sopts := &options{}
+	sopts := &options{
+		typ: MessageBinary,
+	}
 
 	for _, opt := range opts {
 		opt.SetServer(sopts)
@@ -111,6 +115,7 @@ func NewHandler(h Handler, opts ...ServerOption) http.Handler {
 
 	return &handler{
 		Handler: h,
+		mtyp:    sopts.typ,
 		wcOptions: &websocket.AcceptOptions{
 			Subprotocols:         []string{"graphql-ws"},
 			OriginPatterns:       sopts.origins,
@@ -126,7 +131,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 		// TODO: Handle error
 		return
 	}
-	conn := newConn(wc)
+	conn := newConn(wc, h.mtyp)
 
 	ctx, cancel := context.WithCancel(req.Context())
 	defer cancel()

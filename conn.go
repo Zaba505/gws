@@ -10,67 +10,12 @@ import (
 	"nhooyr.io/websocket"
 )
 
-// Conn is a client connection that should be closed by the client.
-type Conn struct {
-	wc      *websocket.Conn
-	bufPool *sync.Pool
-
-	done chan struct{}
-}
-
-func newConn(wc *websocket.Conn) *Conn {
-	c := &Conn{
-		wc: wc,
-		bufPool: &sync.Pool{
-			New: func() interface{} {
-				return new(bytes.Buffer)
-			},
-		},
-		done: make(chan struct{}, 1),
-	}
-
-	return c
-}
-
-func (c *Conn) read(ctx context.Context) ([]byte, error) {
-	_, b, err := c.wc.Read(ctx)
-	return b, err
-}
-
-func (c *Conn) write(ctx context.Context, msg operationMessage) error {
-	buf := c.bufPool.Get().(*bytes.Buffer)
-	defer func() {
-		buf.Reset()
-		c.bufPool.Put(buf)
-	}()
-
-	enc := json.NewEncoder(buf)
-
-	err := enc.Encode(&msg)
-	if err != nil {
-		return err
-	}
-
-	return c.wc.Write(ctx, websocket.MessageBinary, buf.Bytes())
-}
-
-// Close closes the underlying WebSocket connection.
-func (c *Conn) Close() error {
-	close(c.done)
-
-	err := c.write(context.Background(), operationMessage{Type: gqlConnectionTerminate})
-	if err != nil {
-		return err
-	}
-
-	return c.wc.Close(websocket.StatusNormalClosure, "closed")
-}
-
 type dialOpts struct {
 	client      *http.Client
 	headers     http.Header
 	compression CompressionMode
 	threshold   int
+	typ         MessageType
 }
 
 // DialOption configures how we set up the connection.
@@ -160,6 +105,34 @@ func WithCompression(mode CompressionMode, threshold int) ConnOption {
 	}
 }
 
+// MessageType represents the type of a Websocket message.
+type MessageType websocket.MessageType
+
+// Re-export message type provided by the underlying Websocket package.
+const (
+	MessageText   = MessageType(websocket.MessageText)
+	MessageBinary = MessageType(websocket.MessageBinary)
+)
+
+type mtyp MessageType
+
+func (t mtyp) SetDial(opts *dialOpts) {
+	opts.typ = MessageType(t)
+}
+
+func (t mtyp) SetServer(opts *options) {
+	opts.typ = MessageType(t)
+}
+
+// WithMessageType allows users to set the underlying WebSocket message encoding.
+// Default is MessageBinary.
+//
+// Note: for browser clients like Apollo GraphQL the MessageText encoding should be used.
+//
+func WithMessageType(typ MessageType) ConnOption {
+	return mtyp(typ)
+}
+
 // WithHTTPClient provides an http.Client to override the default one used.
 func WithHTTPClient(client *http.Client) DialOption {
 	return optionFn(func(opts *dialOpts) {
@@ -174,6 +147,30 @@ func WithHeaders(headers http.Header) DialOption {
 	})
 }
 
+// Conn is a client connection that should be closed by the client.
+type Conn struct {
+	mtyp    websocket.MessageType
+	wc      *websocket.Conn
+	bufPool *sync.Pool
+
+	done chan struct{}
+}
+
+func newConn(wc *websocket.Conn, typ MessageType) *Conn {
+	c := &Conn{
+		mtyp: websocket.MessageType(typ),
+		wc:   wc,
+		bufPool: &sync.Pool{
+			New: func() interface{} {
+				return new(bytes.Buffer)
+			},
+		},
+		done: make(chan struct{}, 1),
+	}
+
+	return c
+}
+
 // Dial creates a connection to the given endpoint. By default, it's a non-blocking
 // dial (the function won't wait for connections to be established, and connecting
 // happens in the background).
@@ -181,6 +178,7 @@ func WithHeaders(headers http.Header) DialOption {
 func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, error) {
 	dopts := &dialOpts{
 		client: http.DefaultClient,
+		typ:    MessageBinary,
 	}
 
 	for _, opt := range opts {
@@ -201,5 +199,39 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 		return nil, err
 	}
 
-	return newConn(wc), nil
+	return newConn(wc, dopts.typ), nil
+}
+
+func (c *Conn) read(ctx context.Context) ([]byte, error) {
+	_, b, err := c.wc.Read(ctx)
+	return b, err
+}
+
+func (c *Conn) write(ctx context.Context, msg operationMessage) error {
+	buf := c.bufPool.Get().(*bytes.Buffer)
+	defer func() {
+		buf.Reset()
+		c.bufPool.Put(buf)
+	}()
+
+	enc := json.NewEncoder(buf)
+
+	err := enc.Encode(&msg)
+	if err != nil {
+		return err
+	}
+
+	return c.wc.Write(ctx, c.mtyp, buf.Bytes())
+}
+
+// Close closes the underlying WebSocket connection.
+func (c *Conn) Close() error {
+	close(c.done)
+
+	err := c.write(context.Background(), operationMessage{Type: gqlConnectionTerminate})
+	if err != nil {
+		return err
+	}
+
+	return c.wc.Close(websocket.StatusNormalClosure, "closed")
 }

@@ -20,6 +20,7 @@ func TestServerOptions(t *testing.T) {
 	opts := []ServerOption{
 		WithOrigins("test.example.com"),
 		WithCompression(CompressionDisabled, 0),
+		WithMessageType(MessageText),
 	}
 
 	srv := httptest.NewServer(NewHandler(HandlerFunc(testHandler), opts...))
