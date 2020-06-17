@@ -1,4 +1,4 @@
-module github.com/Zaba505/gws
+module github.com/zaba505/gws
 
 go 1.14
 
