@@ -58,6 +58,11 @@ func (s *Stream) Send(ctx context.Context, resp *Response) error {
 // prevent any leaks.
 //
 func (s *Stream) Close() error {
+	select {
+	case <-s.done:
+		return ErrStreamClosed
+	default:
+	}
 	close(s.done)
 
 	return s.conn.write(context.TODO(), operationMessage{ID: s.id, Type: gqlComplete})
@@ -127,6 +132,13 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	defer cancel()
 	defer wc.CloseRead(ctx)
 
+	streams := make(map[opID]*Stream)
+	defer func() {
+		for _, s := range streams {
+			s.Close()
+		}
+	}()
+
 	// Handle messages
 	msg := new(operationMessage)
 	for {
@@ -150,12 +162,24 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 			conn.write(ctx, operationMessage{Type: gqlConnectionAck})
 			break
 		case gqlStart:
-			cp := msg.Payload.(*Request)
+			s := &Stream{
+				id:   msg.ID,
+				conn: conn,
+				done: make(chan struct{}, 1),
+			}
 
-			go handleRequest(conn, h, msg.ID, cp)
+			streams[msg.ID] = s
+
+			go handleRequest(s, h, msg.ID, msg.Payload.(*Request))
 			break
 		case gqlStop:
-			// TODO: should stop be handle by the message handler
+			s, ok := streams[msg.ID]
+			if !ok {
+				break
+			}
+			delete(streams, msg.ID)
+
+			s.Close()
 		case gqlConnectionTerminate:
 			return
 		default:
@@ -165,16 +189,10 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, req *http.Request) {
 	}
 }
 
-func handleRequest(conn *Conn, h Handler, id opID, req *Request) {
-	s := &Stream{
-		id:   id,
-		conn: conn,
-		done: make(chan struct{}, 1),
-	}
-
+func handleRequest(s *Stream, h Handler, id opID, req *Request) {
 	err := h.ServeGraphQL(s, req)
 	if err != nil {
-		conn.write(context.TODO(), operationMessage{
+		s.conn.write(context.TODO(), operationMessage{
 			ID:      id,
 			Type:    gqlError,
 			Payload: &ServerError{Msg: err.Error()},

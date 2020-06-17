@@ -126,6 +126,54 @@ func TestStream_ConcurrentSend(t *testing.T) {
 	}
 }
 
+func TestStream_StopOnMessage(t *testing.T) {
+	unsubscribed := make(chan struct{})
+	done := make(chan struct{})
+
+	srv := httptest.NewServer(NewHandler(HandlerFunc(func(s *Stream, req *Request) error {
+		defer close(done)
+		defer s.Close()
+
+		<-unsubscribed
+
+		for {
+			err := s.Send(context.TODO(), &Response{Data: []byte(`{"hello":{"world":"1"}}`)})
+			if err != nil && err != ErrStreamClosed {
+				t.Error(err)
+				return err
+			}
+			if err == ErrStreamClosed {
+				return nil
+			}
+		}
+	})))
+	defer srv.Close()
+
+	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	client := NewClient(conn)
+
+	sub, err := client.Subscribe(context.TODO(), &Request{Query: "{ hello { world } }"})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	err = sub.Unsubscribe()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	close(unsubscribed)
+	<-done
+}
+
 func TestErrMessage(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(HandlerFunc(testHandler)))
 	defer srv.Close()
