@@ -11,7 +11,7 @@ import (
 )
 
 // ErrUnsubscribed is returned by a subscription receive when the subscription
-// is ubsubscribed to or completed before the next response is received.
+// is unsubscribed to or completed before the next response is received.
 //
 var ErrUnsubscribed = errors.New("gws: received cancelled due to unsubscribe")
 
