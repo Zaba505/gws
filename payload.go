@@ -73,6 +73,16 @@ type operationMessage struct {
 	Payload payload `json:"payload,omitempty"`
 }
 
+// ErrUnsupportedMsgType represents an unsupported message type, per
+// the GraphQL over Websocket protocol.
+//
+type ErrUnsupportedMsgType string
+
+// Error implements the error interface.
+func (e ErrUnsupportedMsgType) Error() string {
+	return "gws: unsupported message type: " + string(e)
+}
+
 func (m *operationMessage) UnmarshalJSON(b []byte) error {
 	var raw struct {
 		ID      opID            `json:"id,omitempty"`
@@ -93,7 +103,7 @@ func (m *operationMessage) UnmarshalJSON(b []byte) error {
 		return nil
 	}
 
-	switch raw.Type {
+	switch m.Type {
 	case gqlConnectionInit, gqlStart, gqlStop, gqlConnectionTerminate:
 		req := new(Request)
 		m.Payload = req
@@ -107,6 +117,6 @@ func (m *operationMessage) UnmarshalJSON(b []byte) error {
 		m.Payload = serr
 		return json.Unmarshal(raw.Payload, serr)
 	default:
-		return fmt.Errorf("unsupported message type: %s", raw.Type)
+		return ErrUnsupportedMsgType(raw.Type)
 	}
 }

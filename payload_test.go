@@ -3,6 +3,7 @@ package gws
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
@@ -58,6 +59,11 @@ func TestOpMessage_Unmarshal(t *testing.T) {
 }`,
 			Payload: &Request{Query: "{ hello { world } }"},
 		},
+		{
+			Name: "UnsupportedType",
+			JSON: `{"type":"asdgf", "payload": {}}`,
+			Err:  ErrUnsupportedMsgType("asdgf"),
+		},
 	}
 
 	for _, testCase := range testCases {
@@ -65,21 +71,21 @@ func TestOpMessage_Unmarshal(t *testing.T) {
 			msg := new(operationMessage)
 
 			err := json.Unmarshal([]byte(testCase.JSON), msg)
-			if err != nil && testCase.Err == nil {
+			t.Log(err)
+			switch {
+			case err != nil && testCase.Err == nil:
 				subT.Errorf("unexpected error when unmarshaling: %s", err)
 				return
-			}
-			if err != nil && err != testCase.Err {
+			case err == nil && testCase.Err != nil:
+				subT.Errorf("expected error: %s", testCase.Err)
+				return
+			case err != nil && !errors.Is(err, testCase.Err):
 				subT.Logf("expected error: %s, but got: %s", testCase.Err, err)
 				subT.Fail()
 				return
-			}
-
-			if testCase.Payload == nil {
+			case testCase.Payload == nil:
 				return
-			}
-
-			if msg.Payload == nil {
+			case msg.Payload == nil:
 				subT.Logf("expected payload: %v, but got nothing", testCase.Payload)
 				subT.Fail()
 				return
