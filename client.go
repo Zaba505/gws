@@ -1,3 +1,4 @@
+// Package gws implements a client and server for the GraphQL over Websocket protocol.
 package gws
 
 import (
