@@ -24,7 +24,7 @@ type Handler interface {
 	ServeGraphQL(*Stream, *Request) error
 }
 
-// HandlerFunc
+// HandlerFunc is an adapter to allow the use of ordinary functions as Request handlers.
 type HandlerFunc func(*Stream, *Request) error
 
 // ServeGraphQL implements the Handler interface.

@@ -10,8 +10,8 @@ import (
 	"time"
 )
 
-// ErrUnsubscribed is return by a subscription receive when the subscription
-// is ubsubscribed or completed before the next response is received.
+// ErrUnsubscribed is returned by a subscription receive when the subscription
+// is ubsubscribed to or completed before the next response is received.
 //
 var ErrUnsubscribed = errors.New("gws: received cancelled due to unsubscribe")
 
