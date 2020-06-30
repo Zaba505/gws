@@ -1,5 +1,5 @@
 [![Go Report Card](https://goreportcard.com/badge/github.com/zaba505/gws)](https://goreportcard.com/report/github.com/zaba505/gws)
-[![GoDoc](https://godoc.org/github.com/Zaba505/gws?status.svg)](https://godoc.org/github.com/Zaba505/gws)
+[![GoDoc](https://godoc.org/github.com/Zaba505/gws?status.svg)](https://pkg.go.dev/github.com/zaba505/gws?tab=doc)
 [![build](https://github.com/Zaba505/gws/workflows/build/badge.svg)](https://github.com/Zaba505/gws/actions)
 [![codecov](https://codecov.io/gh/Zaba505/gws/branch/master/graph/badge.svg)](https://codecov.io/gh/Zaba505/gws)
 
