@@ -2,6 +2,7 @@
 [![GoDoc](https://godoc.org/github.com/Zaba505/gws?status.svg)](https://pkg.go.dev/github.com/zaba505/gws?tab=doc)
 [![build](https://github.com/Zaba505/gws/workflows/build/badge.svg)](https://github.com/Zaba505/gws/actions)
 [![codecov](https://codecov.io/gh/Zaba505/gws/branch/master/graph/badge.svg)](https://codecov.io/gh/Zaba505/gws)
+[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge.svg)](https://github.com/avelino/awesome-go)
 
 # gws
 A WebSocket client and server for GraphQL.
