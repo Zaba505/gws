@@ -10,17 +10,17 @@ type reqType string
 const (
 	// Client -> Server
 	gqlConnectionInit      reqType = "connection_init"
-	gqlStart                       = "start"
-	gqlStop                        = "stop"
-	gqlConnectionTerminate         = "connection_terminate"
+	gqlStart               reqType = "start"
+	gqlStop                reqType = "stop"
+	gqlConnectionTerminate reqType = "connection_terminate"
 
 	// Server -> Client
-	gqlConnectionError     = "connection_error"
-	gqlConnectionAck       = "connection_ack"
-	gqlData                = "data"
-	gqlError               = "error"
-	gqlComplete            = "complete"
-	gqlConnectionKeepAlive = "connection_keep_alive"
+	gqlConnectionError     reqType = "connection_error"
+	gqlConnectionAck       reqType = "connection_ack"
+	gqlData                reqType = "data"
+	gqlError               reqType = "error"
+	gqlComplete            reqType = "complete"
+	gqlConnectionKeepAlive reqType = "connection_keep_alive"
 )
 
 // Request represents a payload sent from the client.

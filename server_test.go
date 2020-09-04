@@ -35,6 +35,72 @@ func TestServerOptions(t *testing.T) {
 	conn.Close()
 }
 
+func TestServerKeepAlive(t *testing.T) {
+	opts := []ServerOption{
+		WithKeepAlive(500 * time.Millisecond),
+	}
+
+	srv := httptest.NewServer(NewHandler(HandlerFunc(testHandler), opts...))
+	defer srv.Close()
+
+	conn, err := Dial(context.Background(), "ws://"+srv.Listener.Addr().String())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer conn.Close()
+
+	err = conn.write(context.Background(), operationMessage{Type: gqlConnectionInit})
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	// Should be the ack message
+	_, err = conn.read(context.Background())
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	b, err := conn.read(ctx)
+	cancel()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	resp := new(operationMessage)
+	if err = resp.UnmarshalJSON(b); err != nil {
+		t.Error(err)
+		return
+	}
+	if resp.Type != gqlConnectionKeepAlive {
+		t.Logf("expected connection keep alive but got: %s", resp.Type)
+		t.Fail()
+		return
+	}
+
+	ctx, cancel = context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+	b, err = conn.read(ctx)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	if err = resp.UnmarshalJSON(b); err != nil {
+		t.Error(err)
+		return
+	}
+	if resp.Type != gqlConnectionKeepAlive {
+		t.Logf("expected connection keep alive but got: %s", resp.Type)
+		t.Fail()
+		return
+	}
+}
+
 func TestStream_SendAfterClose(t *testing.T) {
 	srv := httptest.NewServer(NewHandler(HandlerFunc(func(s *Stream, req *Request) error {
 		s.Close()

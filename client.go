@@ -178,7 +178,7 @@ func (c *client) initConn(timeout time.Duration) error {
 	}
 	if ackMsg.Type != gqlConnectionAck {
 		return ErrUnexpectedMessage{
-			Expected: gqlConnectionAck,
+			Expected: string(gqlConnectionAck),
 			Received: string(ackMsg.Type),
 		}
 	}
