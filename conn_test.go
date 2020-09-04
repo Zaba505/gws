@@ -2,10 +2,15 @@ package gws
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
-	"nhooyr.io/websocket"
 	"testing"
+	"time"
+
+	"github.com/zaba505/gws/backoff"
+	"nhooyr.io/websocket"
 )
 
 func TestWithDialOptions(t *testing.T) {
@@ -75,6 +80,32 @@ func TestTerminate(t *testing.T) {
 		return
 	}
 	conn.Close()
+}
+
+func TestDialBackoff(t *testing.T) {
+	ls, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	defer ls.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	addr := ls.Addr().(*net.TCPAddr)
+	_, err = Dial(
+		ctx,
+		fmt.Sprintf("ws://localhost:%d", addr.Port),
+		WithConnectParams(ConnectParams{
+			Backoff:           backoff.DefaultConfig,
+			MinConnectTimeout: 1 * time.Millisecond,
+		}),
+	)
+	if err == nil {
+		t.Fail()
+		return
+	}
 }
 
 func ExampleDial() {

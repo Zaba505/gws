@@ -4,18 +4,28 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"sync"
+	"time"
+
+	"github.com/zaba505/gws/backoff"
+	internalbackoff "github.com/zaba505/gws/internal/backoff"
 
 	"nhooyr.io/websocket"
 )
 
+const minConnectTimeout = 20 * time.Second
+
 type dialOpts struct {
-	client      *http.Client
-	headers     http.Header
-	compression CompressionMode
-	threshold   int
-	typ         MessageType
+	bs                internalbackoff.Strategy
+	minConnectTimeout func() time.Duration
+	client            *http.Client
+	headers           http.Header
+	compression       CompressionMode
+	threshold         int
+	typ               MessageType
 }
 
 // DialOption configures how we set up the connection.
@@ -147,6 +157,36 @@ func WithHeaders(headers http.Header) DialOption {
 	})
 }
 
+// ConnectParams defines the parameters for connecting and retrying. Users are
+// encouraged to use this instead of the BackoffConfig type defined above. See
+// here for more details:
+// https://github.com/grpc/grpc/blob/master/doc/connection-backoff.md.
+//
+// This API is EXPERIMENTAL.
+type ConnectParams struct {
+	// Backoff specifies the configuration options for connection backoff.
+	Backoff backoff.Config
+	// MinConnectTimeout is the minimum amount of time we are willing to give a
+	// connection to complete.
+	MinConnectTimeout time.Duration
+}
+
+// DefaultConnectParams is a default configuration for retrying with a backoff.
+var DefaultConnectParams = ConnectParams{
+	Backoff:           backoff.DefaultConfig,
+	MinConnectTimeout: 20 * time.Second,
+}
+
+// WithConnectParams configures the client to use the provided ConnectParams.
+func WithConnectParams(p ConnectParams) DialOption {
+	return optionFn(func(opts *dialOpts) {
+		opts.bs = internalbackoff.Exponential{Config: p.Backoff}
+		opts.minConnectTimeout = func() time.Duration {
+			return p.MinConnectTimeout
+		}
+	})
+}
+
 // Conn is a client connection that should be closed by the client.
 type Conn struct {
 	mtyp    websocket.MessageType
@@ -176,16 +216,29 @@ func newConn(wc *websocket.Conn, typ MessageType) *Conn {
 // happens in the background).
 //
 func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, error) {
-	dopts := &dialOpts{
-		client: http.DefaultClient,
-		typ:    MessageBinary,
+	fopts := []DialOption{
+		WithHTTPClient(http.DefaultClient),
+		WithMessageType(MessageBinary),
+		WithConnectParams(DefaultConnectParams),
 	}
+	fopts = append(fopts, opts...)
 
-	for _, opt := range opts {
+	dopts := new(dialOpts)
+	for _, opt := range fopts {
 		opt.SetDial(dopts)
 	}
 
-	d := &websocket.DialOptions{
+	// TODO: Handle resp
+	wc, _, err := dial(ctx, endpoint, dopts)
+	if err != nil {
+		return nil, err
+	}
+
+	return newConn(wc, dopts.typ), nil
+}
+
+func dial(ctx context.Context, endpoint string, dopts *dialOpts) (wc *websocket.Conn, resp *http.Response, err error) {
+	opts := &websocket.DialOptions{
 		HTTPClient:           dopts.client,
 		HTTPHeader:           dopts.headers,
 		Subprotocols:         []string{"graphql-ws"},
@@ -193,13 +246,35 @@ func Dial(ctx context.Context, endpoint string, opts ...DialOption) (*Conn, erro
 		CompressionThreshold: dopts.threshold,
 	}
 
-	// TODO: Handle resp
-	wc, _, err := websocket.Dial(ctx, endpoint, d)
-	if err != nil {
-		return nil, err
-	}
+	backoffIdx := 0
+	for {
+		dialDuration := dopts.minConnectTimeout()
 
-	return newConn(wc, dopts.typ), nil
+		backoffFor := dopts.bs.Backoff(backoffIdx) // TODO count backoff
+		if dialDuration < backoffFor {
+			dialDuration = backoffFor
+		}
+
+		dctx, cancel := context.WithTimeout(ctx, dialDuration)
+		wc, resp, err = websocket.Dial(dctx, endpoint, opts)
+		cancel()
+		if err == nil {
+			return
+		}
+		var ne net.Error
+		if !errors.As(err, &ne) || (!ne.Timeout() && !ne.Temporary()) {
+			return
+		}
+
+		timer := time.NewTimer(backoffFor)
+		select {
+		case <-timer.C:
+			backoffIdx++
+		case <-ctx.Done():
+			timer.Stop()
+			return
+		}
+	}
 }
 
 func (c *Conn) read(ctx context.Context) ([]byte, error) {
